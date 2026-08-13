@@ -93,6 +93,14 @@ class Mhs3528ProfileTests(unittest.TestCase):
             )
             self.assertGreater(output.stat().st_size, 0)
 
+    def test_panel_profile_matches_mhs3528_bus_format_and_reset_sequence(self):
+        overlay = (ROOT / "modern" / "mhs3528-overlay.dts").read_text()
+        commands = (ROOT / "modern" / "mhs3528-panel.txt").read_text()
+
+        self.assertIn('format = "r5g6b5";', overlay)
+        self.assertIn("reset-gpios = <&gpio 25 0>;", overlay)
+        self.assertIn("command 0x3a 0x55", commands)
+
     def test_dry_run_exactly_lists_targeted_changes_and_no_op(self):
         result = self.run_installer("--dry-run")
 

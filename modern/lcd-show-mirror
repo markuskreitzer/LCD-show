@@ -2,7 +2,7 @@
 
 set -u
 
-frame_rate=${LCD_MIRROR_FPS:-15}
+frame_rate=${LCD_MIRROR_FPS:-10}
 runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 wayland_display=${WAYLAND_DISPLAY:-wayland-0}
 
@@ -56,6 +56,19 @@ find_output() {
         '
 }
 
+configure_headless_output() {
+    case "$1" in
+        NOOP-*)
+            env XDG_RUNTIME_DIR="$runtime_dir" WAYLAND_DISPLAY="$wayland_display" \
+                wlr-randr \
+                    --output "$1" \
+                    --custom-mode 960x640 \
+                    --scale 2 \
+                    >/dev/null
+            ;;
+    esac
+}
+
 while :; do
     framebuffer=${LCD_MIRROR_FRAMEBUFFER:-$(find_framebuffer || true)}
     output=${LCD_MIRROR_OUTPUT:-$(find_output || true)}
@@ -65,11 +78,15 @@ while :; do
         continue
     fi
 
+    if ! configure_headless_output "$output"; then
+        sleep 2
+        continue
+    fi
+
     env XDG_RUNTIME_DIR="$runtime_dir" WAYLAND_DISPLAY="$wayland_display" \
         wf-recorder \
             --output "$output" \
             --no-dmabuf \
-            --no-damage \
             --framerate "$frame_rate" \
             --codec rawvideo \
             --muxer fbdev \

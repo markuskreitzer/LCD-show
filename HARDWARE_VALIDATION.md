@@ -1,7 +1,7 @@
 # CUQI 3.5-inch Display-F validation
 
-Status: hardware display output validated on 2026-08-13. Touch calibration and
-desktop scaling are still in progress.
+Status: hardware output and software scaling validated on 2026-08-13. Physical
+readability confirmation and touch calibration are still pending.
 
 ## Hardware identity
 
@@ -42,10 +42,13 @@ The following stack produced a visible desktop and working touch events:
    override.
 3. GPIO 25 for reset, GPIO 24 for data/command, SPI0 CE0 for display, SPI0 CE1
    for touch, and GPIO 17 for the touch interrupt.
-4. A 1920 x 1080 Labwc headless output named `NOOP-1`.
+4. A 960 x 640 Labwc headless output named `NOOP-1`, configured at 2x scale for
+   an exact 480 x 320 logical desktop.
 5. `modern/lcd-show-mirror`, run by
    `modern/lcd-show-mirror.service`, to scale the Wayland output to RGB565
-   480 x 320 and write it to `/dev/fb0` at 15 frames per second.
+   480 x 320 and write it to `/dev/fb0`. It caps changed frames at 10 frames per
+   second and uses compositor damage tracking when the desktop is idle.
+6. LXTerminal configured with `fontname=Monospace 14` for new terminal windows.
 
 The running mirror executable matched the repository copy byte for byte when
 this record was written. The user service was active and enabled. The mirror
@@ -76,6 +79,11 @@ of truth for those dependencies.
   validated image on this board. The bad connector position invalidated some
   of those observations, so the modern profile remains experimental rather
   than disproved.
+- The initial 1920 x 1080 source at 1x scale made the desktop unreadably small
+  after reduction to 480 x 320.
+- The initial mirror used `--no-damage` at 15 frames per second and consumed
+  about 53% of one CPU. A 960 x 640 source reduced it to about 37%. Enabling
+  damage tracking reduced measured idle service CPU to 0.9% over ten seconds.
 
 The corrected connector was the immediate cause of the last white-screen
 failure. The separate change to the legacy framebuffer stack means this test
@@ -85,12 +93,12 @@ does not prove that the modern MHS3528 profile works with this Display-F board.
 
 - Touch coordinates are substantially wrong. Calibration needs physical taps
   at known screen positions and cannot be completed remotely.
-- The 1920 x 1080 source desktop is too small after reduction to 480 x 320.
-  Output scaling and a larger terminal font are the next software changes.
-- At 15 frames per second, `wf-recorder` used about 53% of one CPU while
-  `rf-field` used about 91% of one CPU. The measured temperature was 73.6 C and
-  `vcgencmd get_throttled` returned `0x0`. This is a functional result, not a
-  thermal or performance acceptance test.
+- Physical confirmation of the 2x desktop scale and 14 pt terminal text is
+  pending because no one was at the LCD when the settings were applied.
+- Active desktop changes will use more CPU than the 0.9% idle measurement. The
+  measured temperature after the idle test was 63.7 C and
+  `vcgencmd get_throttled` returned `0x0`. This is not a full thermal or
+  performance acceptance test.
 - The fan state cannot be verified remotely.
 - The safe installer does not yet reproduce the live Display-F overlay and
   mirror service. The legacy root installers remain unsupported and unsafe for
@@ -100,8 +108,8 @@ does not prove that the modern MHS3528 profile works with this Display-F board.
 
 1. Add a crash-safe, reversible Display-F installer instead of using a legacy
    root script.
-2. Increase desktop and terminal scale for the 480 x 320 panel.
-3. Reduce mirror CPU use while keeping terminal interaction acceptable.
+2. Confirm desktop and terminal readability with a person at the panel.
+3. Confirm that 10 FPS feels responsive during keyboard input.
 4. Calibrate touch with physical top-left and bottom-right reference taps.
 5. Verify all four corners, display rotation, touch rotation, fan operation,
    temperature, and throttling under the intended workload.

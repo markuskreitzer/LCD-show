@@ -55,6 +55,9 @@ The CUQI board produced a visible desktop with the kernel `fb_ili9486` and
 `ads7846` drivers plus the source-only mirror in `modern/lcd-show-mirror`. The
 matching user unit is `modern/lcd-show-mirror.service`. The helper uses the
 Raspberry Pi OS `wf-recorder` and `wlr-randr` packages; it downloads nothing.
+For a headless `NOOP-*` source only, it selects a 960 x 640 mode with 2x scale.
+This gives the LCD a 480 x 320 logical desktop. Damage tracking keeps an idle
+terminal from consuming CPU continuously.
 
 These files are preserved as validated building blocks, but the safe installer
 does not install them yet. Do not run the legacy `LCD35-show` installer to

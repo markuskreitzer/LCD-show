@@ -55,6 +55,15 @@ class DisplayFMirrorTests(unittest.TestCase):
         self.assertIn('[ "$framebuffer_name" = "fb_ili9486" ]', mirror)
         self.assertIn("--pixel-format rgb565le", mirror)
 
+    def test_mirror_scales_only_a_headless_output_for_the_lcd(self):
+        mirror = (ROOT / "modern" / "lcd-show-mirror").read_text()
+
+        self.assertIn("NOOP-*)", mirror)
+        self.assertIn("--custom-mode 960x640", mirror)
+        self.assertIn("--scale 2", mirror)
+        self.assertIn("LCD_MIRROR_FPS:-10", mirror)
+        self.assertNotIn("--no-damage", mirror)
+
 
 class Mhs3528ProfileTests(unittest.TestCase):
     def setUp(self):

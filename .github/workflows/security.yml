@@ -1,0 +1,79 @@
+name: Security
+
+on:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "17 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install device-tree compiler
+        run: sudo apt-get update && sudo apt-get install --yes device-tree-compiler
+      - name: Run tests
+        run: python3 -m unittest discover -s tests -v
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+      - name: Check safe installer
+        run: shellcheck MHS35-safe
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+        with:
+          languages: c-cpp,python
+          build-mode: none
+      - name: Analyze source
+        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+
+  sbom:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: lcd-show.spdx.json
+          artifact-name: lcd-show.spdx.json
+          syft-version: v1.51.0
+      - name: Scan SBOM
+        id: grype
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7
+        with:
+          sbom: lcd-show.spdx.json
+          fail-build: true
+          severity-cutoff: critical
+          only-fixed: true
+          grype-version: v0.117.0
+      - name: Upload vulnerability results
+        if: always() && steps.grype.outputs.sarif != ''
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}

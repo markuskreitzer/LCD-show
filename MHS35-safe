@@ -1,0 +1,139 @@
+#!/bin/bash
+
+set -euo pipefail
+
+readonly begin_marker="# BEGIN LCD-show MHS3528"
+readonly end_marker="# END LCD-show MHS3528"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly script_dir
+readonly config_file="/boot/firmware/config.txt"
+readonly overlay_file="/boot/firmware/overlays/mhs3528.dtbo"
+readonly firmware_file="/lib/firmware/mhs3528.bin"
+
+usage() {
+    echo "Usage: sudo ./MHS35-safe {--dry-run|--install|--uninstall}"
+}
+
+config_block() {
+    cat <<EOF
+$begin_marker
+dtparam=spi=on
+dtoverlay=mhs3528
+$end_marker
+EOF
+}
+
+require_supported_system() {
+    local model
+    model="$(tr -d '\0' </proc/device-tree/model 2>/dev/null || true)"
+    [[ "$model" == *"Raspberry Pi 5"* ]] || {
+        echo "Error: this profile is validated only for Raspberry Pi 5." >&2
+        exit 1
+    }
+    [[ -f "$config_file" ]] || {
+        echo "Error: $config_file does not exist." >&2
+        exit 1
+    }
+    command -v dtc >/dev/null || {
+        echo "Error: dtc is required (Debian package: device-tree-compiler)." >&2
+        exit 1
+    }
+    command -v python3 >/dev/null || {
+        echo "Error: python3 is required." >&2
+        exit 1
+    }
+    modinfo panel_mipi_dbi >/dev/null 2>&1 || {
+        echo "Error: the running kernel does not provide panel_mipi_dbi." >&2
+        exit 1
+    }
+    modinfo ads7846 >/dev/null 2>&1 || {
+        echo "Error: the running kernel does not provide ads7846." >&2
+        exit 1
+    }
+}
+
+without_managed_block() {
+    awk -v begin="$begin_marker" -v end="$end_marker" '
+        $0 == begin { managed = 1; next }
+        $0 == end { managed = 0; next }
+        !managed { print }
+    ' "$config_file"
+}
+
+install_profile() {
+    local work_dir new_config backup_dir
+    [[ "$EUID" -eq 0 ]] || {
+        echo "Error: --install requires root." >&2
+        exit 1
+    }
+    require_supported_system
+    work_dir="$(mktemp -d /tmp/lcd-show.XXXXXX)"
+    dtc -@ -I dts -O dtb -o "$work_dir/mhs3528.dtbo" \
+        "$script_dir/modern/mhs3528-overlay.dts"
+    python3 "$script_dir/modern/mipi-dbi-cmd.py" \
+        "$work_dir/mhs3528.bin" "$script_dir/modern/mhs3528-panel.txt"
+    new_config="$work_dir/config.txt"
+    without_managed_block >"$new_config"
+    printf '\n' >>"$new_config"
+    config_block >>"$new_config"
+    backup_dir="/var/backups/lcd-show/$(date -u +%Y%m%dT%H%M%SZ)"
+    install -d -m 0755 "$backup_dir"
+    cp --preserve=mode,ownership,timestamps "$config_file" "$backup_dir/config.txt"
+    install -m 0644 "$work_dir/mhs3528.dtbo" "$overlay_file"
+    install -m 0644 "$work_dir/mhs3528.bin" "$firmware_file"
+    chown --reference="$config_file" "$new_config"
+    chmod --reference="$config_file" "$new_config"
+    mv -- "$new_config" "$config_file"
+    sync
+    [[ "$work_dir" == /tmp/lcd-show.* && -d "$work_dir" && ! -L "$work_dir" ]]
+    rm -r -- "$work_dir"
+    echo "Installed the MHS3528 profile. Backup: $backup_dir/config.txt"
+    echo "Power off before attaching the display. This command does not reboot."
+}
+
+uninstall_profile() {
+    local work_dir new_config backup_dir
+    [[ "$EUID" -eq 0 ]] || {
+        echo "Error: --uninstall requires root." >&2
+        exit 1
+    }
+    [[ -f "$config_file" ]] || {
+        echo "Error: $config_file does not exist." >&2
+        exit 1
+    }
+    work_dir="$(mktemp -d /tmp/lcd-show.XXXXXX)"
+    new_config="$work_dir/config.txt"
+    without_managed_block >"$new_config"
+    backup_dir="/var/backups/lcd-show/$(date -u +%Y%m%dT%H%M%SZ)"
+    install -d -m 0755 "$backup_dir"
+    cp --preserve=mode,ownership,timestamps "$config_file" "$backup_dir/config.txt"
+    chown --reference="$config_file" "$new_config"
+    chmod --reference="$config_file" "$new_config"
+    mv -- "$new_config" "$config_file"
+    rm -f -- "$overlay_file" "$firmware_file"
+    sync
+    [[ "$work_dir" == /tmp/lcd-show.* && -d "$work_dir" && ! -L "$work_dir" ]]
+    rm -r -- "$work_dir"
+    echo "Removed the MHS3528 profile. Backup: $backup_dir/config.txt"
+    echo "Reboot to finish removal."
+}
+
+case "${1:-}" in
+    --dry-run)
+        echo "MHS3528: ILI9486 display on SPI0 CE0; XPT2046 touch on CE1"
+        echo "Would install: $overlay_file"
+        echo "Would install: $firmware_file"
+        echo "Would add to: $config_file"
+        config_block
+        ;;
+    --install)
+        install_profile
+        ;;
+    --uninstall)
+        uninstall_profile
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac

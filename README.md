@@ -1,3 +1,43 @@
+# LCD-show
+
+> **Warning:** The legacy `*-show` scripts make broad root-level changes to
+> boot, X11, package, and startup configuration. Do not run them on a current
+> Raspberry Pi OS installation without reviewing them first. See
+> [RESEARCH_NOTES.md](RESEARCH_NOTES.md).
+
+## Safer MHS3528 support for Raspberry Pi 5
+
+`MHS35-safe` is an experimental, source-only installer for the MHS3528 board:
+
+- 3.5-inch, 480 x 320 ILI9486 SPI display
+- XPT2046 resistive touch controller
+- Raspberry Pi 5 with the in-kernel `panel_mipi_dbi` and `ads7846` drivers
+
+It downloads nothing, changes no packages, and does not replace X11, login, or
+startup files. It installs one device-tree overlay, one panel command file, and
+one marked block in `/boot/firmware/config.txt`. It makes a timestamped backup
+and supports targeted removal.
+
+Inspect the planned changes first:
+
+```sh
+./MHS35-safe --dry-run
+```
+
+After you have stable Pi 5 power and cooling, install while the display is
+disconnected:
+
+```sh
+sudo ./MHS35-safe --install
+sudo poweroff
+```
+
+Attach the display only after shutdown. This profile still needs hardware
+validation on Raspberry Pi 5. To remove it, use `sudo ./MHS35-safe --uninstall`
+and reboot.
+
+## Legacy instructions
+
 ### Install drivers in the Ubuntu system
 https://github.com/lcdwiki/LCD-show-ubuntu
 
@@ -199,6 +239,5 @@ sudo ./rotate.sh 90<br>
 After execution, the system will automatically restart, and the display screen will rotate 90 degrees to display and touch normally.<br>
 ( ' 90 ' can be changed to 0, 90, 180 and 270, respectively representing rotation angles of 0 degrees, 90 degrees, 180 degrees, 270 degrees)<br>
 (If the rotate.sh prompt cannot be found, use Method 1 to install the latest drivers)
-
 
 

@@ -18,6 +18,11 @@ startup files. It installs one device-tree overlay, one panel command file, and
 one marked block in `/boot/firmware/config.txt`. It makes a timestamped backup
 and supports targeted removal.
 
+The display initialization commands come from the repository's original
+MHS3528 overlay. The replacement uses the Raspberry Pi kernel's DRM MIPI DBI
+panel driver in RGB666 mode and the in-kernel ADS7846-compatible touch driver.
+The profile does not install third-party executables.
+
 Inspect the planned changes first:
 
 ```sh
@@ -239,5 +244,4 @@ sudo ./rotate.sh 90<br>
 After execution, the system will automatically restart, and the display screen will rotate 90 degrees to display and touch normally.<br>
 ( ' 90 ' can be changed to 0, 90, 180 and 270, respectively representing rotation angles of 0 degrees, 90 degrees, 180 degrees, 270 degrees)<br>
 (If the rotate.sh prompt cannot be found, use Method 1 to install the latest drivers)
-
 

@@ -3,6 +3,7 @@ name: Security
 on:
   push:
     branches: [master]
+  pull_request:
   schedule:
     - cron: "17 8 * * 1"
   workflow_dispatch:
@@ -11,6 +12,25 @@ permissions:
   contents: read
 
 jobs:
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   validate:
     runs-on: ubuntu-latest
     steps:
@@ -69,8 +89,8 @@ jobs:
         with:
           sbom: lcd-show.spdx.json
           fail-build: true
-          severity-cutoff: critical
-          only-fixed: true
+          severity-cutoff: high
+          only-fixed: false
           grype-version: v0.117.0
       - name: Upload vulnerability results
         if: always() && steps.grype.outputs.sarif != ''

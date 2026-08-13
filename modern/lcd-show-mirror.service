@@ -1,0 +1,17 @@
+[Unit]
+Description=Mirror the Wayland desktop to the Display-F SPI LCD
+After=basic.target
+
+[Service]
+Type=simple
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=XDG_RUNTIME_DIR=%t
+ExecStart=/usr/local/bin/lcd-show-mirror
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=5
+Nice=5
+
+[Install]
+WantedBy=default.target

@@ -15,7 +15,7 @@
 			panel@0 {
 				compatible = "lcdwiki,mhs3528", "panel-mipi-dbi-spi";
 				reg = <0>;
-				spi-max-frequency = <32000000>;
+				spi-max-frequency = <16000000>;
 				format = "r5g6b5";
 				reset-gpios = <&gpio 25 0>;
 				dc-gpios = <&gpio 24 0>;

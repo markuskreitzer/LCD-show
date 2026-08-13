@@ -49,7 +49,7 @@ jobs:
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install --yes shellcheck
       - name: Check safe installer
-        run: shellcheck MHS35-safe MHS35-show
+        run: shellcheck MHS35-safe MHS35-show modern/lcd-show-mirror
 
   codeql:
     runs-on: ubuntu-latest

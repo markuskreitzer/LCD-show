@@ -1,0 +1,82 @@
+#!/bin/sh
+
+set -u
+
+frame_rate=${LCD_MIRROR_FPS:-15}
+runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+wayland_display=${WAYLAND_DISPLAY:-wayland-0}
+
+case "$frame_rate" in
+    ''|*[!0-9]*|0)
+        echo "LCD_MIRROR_FPS must be a positive integer" >&2
+        exit 2
+        ;;
+esac
+
+for command_name in wf-recorder wlr-randr; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        echo "$command_name is required" >&2
+        exit 1
+    fi
+done
+
+find_framebuffer() {
+    for name_path in /sys/class/graphics/fb*/name; do
+        [ -r "$name_path" ] || continue
+        IFS= read -r framebuffer_name < "$name_path" || continue
+        if [ "$framebuffer_name" = "fb_ili9486" ]; then
+            framebuffer_dir=${name_path%/name}
+            printf '/dev/%s\n' "${framebuffer_dir##*/}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+find_output() {
+    env XDG_RUNTIME_DIR="$runtime_dir" WAYLAND_DISPLAY="$wayland_display" \
+        wlr-randr 2>/dev/null |
+        awk '
+            /^[^[:space:]]/ { current = $1 }
+            /^[[:space:]]+Enabled: yes$/ {
+                if (current !~ /^NOOP-/) {
+                    print current
+                    found = 1
+                    exit
+                }
+                if (fallback == "") {
+                    fallback = current
+                }
+            }
+            END {
+                if (!found && fallback != "") {
+                    print fallback
+                }
+            }
+        '
+}
+
+while :; do
+    framebuffer=${LCD_MIRROR_FRAMEBUFFER:-$(find_framebuffer || true)}
+    output=${LCD_MIRROR_OUTPUT:-$(find_output || true)}
+
+    if [ -z "$framebuffer" ] || [ ! -w "$framebuffer" ] || [ -z "$output" ]; then
+        sleep 2
+        continue
+    fi
+
+    env XDG_RUNTIME_DIR="$runtime_dir" WAYLAND_DISPLAY="$wayland_display" \
+        wf-recorder \
+            --output "$output" \
+            --no-dmabuf \
+            --no-damage \
+            --framerate "$frame_rate" \
+            --codec rawvideo \
+            --muxer fbdev \
+            --pixel-format rgb565le \
+            --filter 'scale=480:320:force_original_aspect_ratio=decrease,pad=480:320:(ow-iw)/2:(oh-ih)/2:black' \
+            --overwrite \
+            --file "$framebuffer"
+
+    sleep 1
+done

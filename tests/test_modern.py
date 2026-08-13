@@ -36,6 +36,26 @@ class MipiDbiCommandTests(unittest.TestCase):
             MODULE.compile_commands("command 0x11 256")
 
 
+class DisplayFMirrorTests(unittest.TestCase):
+    def test_mirror_has_valid_posix_shell_syntax(self):
+        subprocess.run(
+            ["sh", "-n", ROOT / "modern" / "lcd-show-mirror"],
+            check=True,
+        )
+
+    def test_user_service_runs_the_tracked_mirror(self):
+        service = (ROOT / "modern" / "lcd-show-mirror.service").read_text()
+
+        self.assertIn("ExecStart=/usr/local/bin/lcd-show-mirror", service)
+        self.assertIn("Restart=on-failure", service)
+
+    def test_mirror_targets_only_the_ili9486_framebuffer(self):
+        mirror = (ROOT / "modern" / "lcd-show-mirror").read_text()
+
+        self.assertIn('[ "$framebuffer_name" = "fb_ili9486" ]', mirror)
+        self.assertIn("--pixel-format rgb565le", mirror)
+
+
 class Mhs3528ProfileTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -97,6 +117,7 @@ class Mhs3528ProfileTests(unittest.TestCase):
         overlay = (ROOT / "modern" / "mhs3528-overlay.dts").read_text()
         commands = (ROOT / "modern" / "mhs3528-panel.txt").read_text()
 
+        self.assertIn("spi-max-frequency = <16000000>;", overlay)
         self.assertIn('format = "r5g6b5";', overlay)
         self.assertIn("reset-gpios = <&gpio 25 0>;", overlay)
         self.assertIn("command 0x3a 0x55", commands)

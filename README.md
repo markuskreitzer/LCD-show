@@ -5,6 +5,12 @@
 > Raspberry Pi OS installation without reviewing them first. See
 > [RESEARCH_NOTES.md](RESEARCH_NOTES.md).
 
+The CUQI 3.5-inch hardware tested on Raspberry Pi 5 matches the common
+`Display-F` board and is documented in
+[HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md). Its validated driver path is
+different from the MHS3528 profile, even though the seller supplied similar
+specifications.
+
 ## Safer MHS3528 support for Raspberry Pi 5
 
 `MHS35-safe` is an experimental, source-only installer for the MHS3528 board:
@@ -20,8 +26,10 @@ and supports targeted removal.
 
 The display initialization commands come from the repository's original
 MHS3528 overlay. The replacement uses the Raspberry Pi kernel's DRM MIPI DBI
-panel driver in RGB666 mode and the in-kernel ADS7846-compatible touch driver.
-The profile does not install third-party executables.
+panel driver in RGB565 mode and the in-kernel ADS7846-compatible touch driver.
+Its experimental SPI clock is capped at a conservative 16 MHz. The profile
+does not install third-party executables. This profile is not the validated
+path for the CUQI `Display-F` board.
 
 Inspect the planned changes first:
 
@@ -40,6 +48,18 @@ sudo poweroff
 Attach the display only after shutdown. This profile still needs hardware
 validation on Raspberry Pi 5. To remove it, use `sudo ./MHS35-safe --uninstall`
 and reboot.
+
+## Validated CUQI Display-F components
+
+The CUQI board produced a visible desktop with the kernel `fb_ili9486` and
+`ads7846` drivers plus the source-only mirror in `modern/lcd-show-mirror`. The
+matching user unit is `modern/lcd-show-mirror.service`. The helper uses the
+Raspberry Pi OS `wf-recorder` and `wlr-randr` packages; it downloads nothing.
+
+These files are preserved as validated building blocks, but the safe installer
+does not install them yet. Do not run the legacy `LCD35-show` installer to
+reproduce the result. See [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md) for
+the exact live state, dependencies, limitations, and remaining work.
 
 ## Archived upstream instructions
 

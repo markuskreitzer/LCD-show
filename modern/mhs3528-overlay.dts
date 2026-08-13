@@ -13,7 +13,7 @@
 			status = "okay";
 
 			panel@0 {
-				compatible = "mhs3528", "panel-mipi-dbi-spi";
+				compatible = "lcdwiki,mhs3528", "panel-mipi-dbi-spi";
 				reg = <0>;
 				spi-max-frequency = <32000000>;
 				format = "b6x2g6x2r6x2";

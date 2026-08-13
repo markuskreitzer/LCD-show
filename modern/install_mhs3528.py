@@ -18,7 +18,7 @@ from mipi_dbi_cmd import compile_commands
 
 BEGIN = "# BEGIN LCD-show MHS3528"
 END = "# END LCD-show MHS3528"
-BLOCK = f"{BEGIN}\ndtparam=spi=on\ndtoverlay=mhs3528\n{END}\n"
+BLOCK = f"{BEGIN}\n[all]\ndtparam=spi=on\ndtoverlay=mhs3528\n{END}\n"
 PROFILE = "mhs3528"
 SOURCE_DIR = Path(__file__).resolve().parent
 
@@ -35,7 +35,7 @@ def paths(root: Path) -> dict[str, Path]:
     return {
         "config": system_path(root, "/boot/firmware/config.txt"),
         "overlay": system_path(root, "/boot/firmware/overlays/mhs3528.dtbo"),
-        "firmware": system_path(root, "/lib/firmware/mhs3528.bin"),
+        "firmware": system_path(root, "/lib/firmware/lcdwiki,mhs3528.bin"),
         "state": system_path(root, "/var/lib/lcd-show/mhs3528.json"),
         "backups": system_path(root, "/var/backups/lcd-show"),
     }
@@ -93,12 +93,20 @@ def remove_block(text: str) -> str:
     if span is None:
         return text
     start, end = span
-    return "".join(lines[:start] + lines[end + 1 :])
+    before = "".join(lines[:start])
+    after = "".join(lines[end + 1 :])
+    if before.endswith("\n"):
+        before = before[:-1]
+    return before + after
 
 
 def add_block(text: str) -> str:
-    clean = remove_block(text).rstrip("\n")
-    return f"{clean}\n\n{BLOCK}" if clean else BLOCK
+    lines = text.splitlines(keepends=True)
+    span = managed_span(text)
+    if span is not None:
+        start, end = span
+        return "".join(lines[:start]) + BLOCK + "".join(lines[end + 1 :])
+    return text + ("\n" if text else "") + BLOCK
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -120,8 +128,20 @@ def fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def ensure_directory(path: Path) -> None:
+    missing = []
+    current = path
+    while not current.exists():
+        missing.append(current)
+        current = current.parent
+    path.mkdir(parents=True, exist_ok=True)
+    for directory in reversed(missing):
+        fsync_directory(directory)
+        fsync_directory(directory.parent)
+
+
 def atomic_write(path: Path, data: bytes, reference: Path | None = None) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_directory(path.parent)
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary = Path(temporary_name)
     try:
@@ -172,6 +192,8 @@ def load_state(state_path: Path) -> dict | None:
         state = json.loads(state_path.read_text())
     except (json.JSONDecodeError, OSError) as error:
         raise InstallError("installer state is invalid") from error
+    if not isinstance(state, dict):
+        raise InstallError("installer state is invalid")
     if state.get("profile") != PROFILE or state.get("status") not in {"pending", "installed"}:
         raise InstallError("installer state is invalid")
     artifacts = state.get("artifacts")
@@ -208,8 +230,11 @@ def validate_artifacts(targets: dict[str, Path], expected: dict[str, str], allow
 
 def new_backup_directory(base: Path) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    ensure_directory(base)
     backup = base / stamp
-    backup.mkdir(parents=True, exist_ok=False)
+    backup.mkdir(exist_ok=False)
+    fsync_directory(backup)
+    fsync_directory(base)
     return backup
 
 
@@ -219,7 +244,14 @@ def backup_files(backup: Path, targets: dict[str, Path]) -> None:
         if source.exists():
             if source.is_symlink() or not source.is_file():
                 raise InstallError(f"cannot back up non-regular file: {source}")
-            shutil.copy2(source, backup / source.name)
+            destination = backup / source.name
+            shutil.copy2(source, destination)
+            descriptor = os.open(destination, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+    fsync_directory(backup)
 
 
 def install(root: Path) -> str:
@@ -300,6 +332,7 @@ def dry_run(root: Path) -> str:
     updated = add_block(original)
     artifacts = build_artifacts()
     state = load_state(targets["state"])
+    expected = artifact_hashes(artifacts)
     if state is None:
         collisions = [
             str(targets[name])
@@ -309,19 +342,30 @@ def dry_run(root: Path) -> str:
         if collisions:
             raise InstallError("refusing to overwrite unmanaged files: " + ", ".join(collisions))
     else:
-        expected = artifact_hashes(artifacts)
         if state["artifacts"] != expected:
             raise InstallError("installed profile differs; uninstall it before updating")
         validate_artifacts(targets, expected, allow_missing=state["status"] == "pending")
+        if (
+            state["status"] == "installed"
+            and updated == original
+            and all(targets[name].exists() for name in ("overlay", "firmware"))
+        ):
+            return "MHS3528 profile is already installed; no filesystem changes would be made."
     lines = [
         "MHS3528: ILI9486 display on SPI0 CE0; XPT2046 touch on CE1",
-        f"Would install: {targets['overlay']}",
-        f"Would install: {targets['firmware']}",
-        f"Would update atomically: {targets['config']}",
-        f"Would back up under: {targets['backups']}/<UTC timestamp>",
+        f"Would write state atomically: {targets['state']}",
+        f"Would install atomically: {targets['overlay']}",
+        f"Would install atomically: {targets['firmware']}",
     ]
+    if updated != original:
+        lines.append(f"Would update atomically: {targets['config']}")
+    else:
+        lines.append(f"Would leave unchanged: {targets['config']}")
+    lines.append(f"Would back up under: {targets['backups']}/<UTC timestamp>")
+    if state is not None and state["status"] == "pending":
+        lines.append("Would resume the pending installation transaction.")
     if updated == original:
-        lines.append("config.txt already contains the managed block.")
+        lines.append("config.txt already contains the exact managed block.")
     else:
         lines.extend(("Would add:", BLOCK.rstrip()))
     return "\n".join(lines)

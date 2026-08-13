@@ -4,7 +4,8 @@
 
 Only `MHS35-safe` and the files under `modern/` are being developed as the
 safer Raspberry Pi 5 path. The legacy scripts and bundled packages remain for
-reference and are not recommended for installation.
+reference and are not supported for installation. `MHS35-show` is disabled so
+the obsolete MHS3528 path cannot make its former system-wide changes.
 
 ## Automated checks
 

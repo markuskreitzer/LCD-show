@@ -41,7 +41,11 @@ Attach the display only after shutdown. This profile still needs hardware
 validation on Raspberry Pi 5. To remove it, use `sudo ./MHS35-safe --uninstall`
 and reboot.
 
-## Legacy instructions
+## Archived upstream instructions
+
+The remaining `*-show` scripts are retained only for source review. They are
+not supported by this fork. Do not run them on a current installation. The
+MHS3528 legacy entry point is disabled and directs users to `MHS35-safe`.
 
 ### Install drivers in the Ubuntu system
 https://github.com/lcdwiki/LCD-show-ubuntu
@@ -162,7 +166,7 @@ EN: http://www.lcdwiki.com/3.5inch_HDMI_Display-B
     
 # MHS-3.5” RPi Display(MHS3528):
 ### Driver install:
-sudo ./MHS35-show
+./MHS35-safe --dry-run
 ### WIKI:
 CN: http://www.lcdwiki.com/zh/MHS-3.5inch_RPi_Display  <br>
 EN:http://www.lcdwiki.com/MHS-3.5inch_RPi_Display
@@ -244,4 +248,3 @@ sudo ./rotate.sh 90<br>
 After execution, the system will automatically restart, and the display screen will rotate 90 degrees to display and touch normally.<br>
 ( ' 90 ' can be changed to 0, 90, 180 and 270, respectively representing rotation angles of 0 degrees, 90 degrees, 180 degrees, 270 degrees)<br>
 (If the rotate.sh prompt cannot be found, use Method 1 to install the latest drivers)
-

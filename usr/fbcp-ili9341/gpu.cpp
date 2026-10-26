@@ -140,7 +140,7 @@ bool SnapshotFramebuffer(uint16_t *destination)
   const int stride = RoundUpToMultipleOf(pixelWidth*sizeof(uint16_t), 32);
   if (!tempTransposeBuffer)
   {
-    tempTransposeBuffer = (uint16_t *)Malloc(pixelHeight * stride * 2, "gpu.cpp tempTransposeBuffer");
+    tempTransposeBuffer = (uint16_t *)Malloc(static_cast<size_t>(pixelHeight) * stride * 2, "gpu.cpp tempTransposeBuffer");
     tempTransposeBuffer += pixelHeight * (stride>>1);
   }
   uint16_t *destPtr = tempTransposeBuffer - excessPixelsLeft * (stride >> 1) - excessPixelsTop;

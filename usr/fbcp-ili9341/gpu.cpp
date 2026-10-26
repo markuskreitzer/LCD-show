@@ -13,6 +13,7 @@
 #include "util.h"
 #include "statistics.h"
 #include "mem_alloc.h"
+#include "framebuffer_size.h"
 
 bool MarkProgramQuitting(void);
 
@@ -59,11 +60,6 @@ int eagerFastTrackToSnapshottingFramesEarlierFactor = 0;
 uint64_t lastFramePollTime = 0;
 
 pthread_t gpuPollingThread;
-
-int RoundUpToMultipleOf(int val, int multiple)
-{
-  return ((val + multiple - 1) / multiple) * multiple;
-}
 
 // Tests if the pixels on the given new captured frame actually contain new image data from the previous frame
 bool IsNewFramebuffer(uint16_t *possiblyNewFramebuffer, uint16_t *oldFramebuffer)
@@ -135,17 +131,17 @@ bool SnapshotFramebuffer(uint16_t *destination)
   // to randomly fail and then subsequently hang if called a second time)
 #ifdef DISPLAY_FLIP_ORIENTATION_IN_SOFTWARE
   static uint16_t *tempTransposeBuffer = 0; // Allocate as static here to keep the number of #ifdefs down a bit
-  const int pixelWidth = gpuFrameHeight+excessPixelsTop+excessPixelsBottom;
-  const int pixelHeight = gpuFrameWidth + excessPixelsLeft + excessPixelsRight;
-  const int stride = RoundUpToMultipleOf(pixelWidth*sizeof(uint16_t), 32);
+  int stride = 0, bufferBytes = 0;
+  if (!ComputeFramebufferLayout(gpuFrameHeight, gpuFrameWidth, excessPixelsTop, excessPixelsBottom, excessPixelsLeft, excessPixelsRight, stride, bufferBytes))
+    FATAL_ERROR("Invalid transposed framebuffer dimensions!");
   if (!tempTransposeBuffer)
   {
-    tempTransposeBuffer = (uint16_t *)Malloc(static_cast<size_t>(pixelHeight) * stride * 2, "gpu.cpp tempTransposeBuffer");
-    tempTransposeBuffer += pixelHeight * (stride>>1);
+    tempTransposeBuffer = (uint16_t *)Malloc(static_cast<size_t>(bufferBytes) * 2, "gpu.cpp tempTransposeBuffer");
+    tempTransposeBuffer += static_cast<size_t>(bufferBytes) / sizeof(uint16_t);
   }
-  uint16_t *destPtr = tempTransposeBuffer - excessPixelsLeft * (stride >> 1) - excessPixelsTop;
+  uint16_t *destPtr = tempTransposeBuffer - static_cast<size_t>(excessPixelsLeft) * (stride >> 1) - excessPixelsTop;
 #else
-  uint16_t *destPtr = destination - excessPixelsTop*(gpuFramebufferScanlineStrideBytes>>1) - excessPixelsLeft;
+  uint16_t *destPtr = destination - static_cast<size_t>(excessPixelsTop)*(gpuFramebufferScanlineStrideBytes>>1) - excessPixelsLeft;
   const int stride = gpuFramebufferScanlineStrideBytes;
 #endif
   failed = vc_dispmanx_resource_read_data(screen_resource, &rect, destPtr, stride);
@@ -440,18 +436,19 @@ void InitGPU()
 
   gpuFrameWidth = scaledWidth;
   gpuFrameHeight = scaledHeight;
-  gpuFramebufferScanlineStrideBytes = RoundUpToMultipleOf((gpuFrameWidth + excessPixelsLeft + excessPixelsRight) * 2, 32);
-  gpuFramebufferSizeBytes = gpuFramebufferScanlineStrideBytes * (gpuFrameHeight + excessPixelsTop + excessPixelsBottom);
+  if (!ComputeFramebufferLayout(gpuFrameWidth, gpuFrameHeight, excessPixelsLeft, excessPixelsRight, excessPixelsTop, excessPixelsBottom, gpuFramebufferScanlineStrideBytes, gpuFramebufferSizeBytes))
+    FATAL_ERROR("Invalid framebuffer dimensions!");
+  const size_t allocationBytes = static_cast<size_t>(gpuFramebufferSizeBytes) * 2;
 
   // BUG in vc_dispmanx_resource_read_data(!!): If one is capturing a small subrectangle of a large screen resource rectangle, the destination pointer 
   // is in vc_dispmanx_resource_read_data() incorrectly still taken to point to the top-left corner of the large screen resource, instead of the top-left
   // corner of the subrectangle to capture. Therefore do dirty pointer arithmetic to adjust for this. To make this safe, videoCoreFramebuffer is allocated
   // double its needed size so that this adjusted pointer does not reference outside allocated memory (if it did, vc_dispmanx_resource_read_data() was seen
   // to randomly fail and then subsequently hang if called a second time)
-  videoCoreFramebuffer[0] = (uint16_t *)Malloc(gpuFramebufferSizeBytes*2, "gpu.cpp framebuffer0");
-  videoCoreFramebuffer[1] = (uint16_t *)Malloc(gpuFramebufferSizeBytes*2, "gpu.cpp framebuffer1");
-  memset(videoCoreFramebuffer[0], 0, gpuFramebufferSizeBytes*2);
-  memset(videoCoreFramebuffer[1], 0, gpuFramebufferSizeBytes*2);
+  videoCoreFramebuffer[0] = (uint16_t *)Malloc(allocationBytes, "gpu.cpp framebuffer0");
+  videoCoreFramebuffer[1] = (uint16_t *)Malloc(allocationBytes, "gpu.cpp framebuffer1");
+  memset(videoCoreFramebuffer[0], 0, allocationBytes);
+  memset(videoCoreFramebuffer[1], 0, allocationBytes);
   videoCoreFramebuffer[0] += (gpuFramebufferSizeBytes>>1);
   videoCoreFramebuffer[1] += (gpuFramebufferSizeBytes>>1);
 
